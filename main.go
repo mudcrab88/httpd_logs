@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+var conf Config
+var confFile = "config.json"
+
 func findStr(pattern string, line string) string {
 	re, err := regexp.Compile(pattern)
 
@@ -21,16 +24,16 @@ func findStr(pattern string, line string) string {
 	return re.FindString(line)
 }
 
-func parseLine(line string) string {
-	ip := findStr(`\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}`, line)
-	timeStr := findStr(`\[.+\]`, line)
-	time, err := time.Parse("[2/Jan/2006:15:04:05 +0700]", timeStr)
+func parseLine(line string, conf *Config) string {
+	ip := findStr(conf.RegularExpressionIP, line)
+	timeStr := findStr(conf.RegularExpressionTime, line)
+	time, err := time.Parse(conf.TimeParseFormat, timeStr)
 	if err != nil {
 		fmt.Println(err)
 		return ""
 	}
 
-	return fmt.Sprintf("%s-%s", time.Format("2/Jan/2006:15:04:05"), ip)
+	return fmt.Sprintf("%s-%s", time.Format(conf.TimeReturnFormat), ip)
 }
 
 func addRecord(res *map[string]int, str string) {
@@ -53,19 +56,19 @@ func getMax(resultMap map[string]int) {
 	}
 }
 
-func parseFile(resultMap *map[string]int, file *os.File, mutex *sync.Mutex) {
+func parseFile(resultMap *map[string]int, file *os.File, mutex *sync.Mutex, conf *Config) {
 	scanner := bufio.NewScanner(file)
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
 		mutex.Lock()
-		addRecord(resultMap, parseLine(line))
+		addRecord(resultMap, parseLine(line, conf))
 		mutex.Unlock()
 	}
 }
 
-func parseLogsDir(path string) {
+func parseLogsDir(path string, conf *Config) {
 	os.Chdir(path)
 	var resultMap = map[string]int{}
 	var mutex sync.Mutex
@@ -87,11 +90,11 @@ func parseLogsDir(path string) {
 
 		wg.Add(1)
 		fmt.Println("Обработка файла: " + entry.Name())
-		go func() {
+		go func(file *os.File) {
 			defer wg.Done()
-			parseFile(&resultMap, file, &mutex)
+			parseFile(&resultMap, file, &mutex, conf)
 			fmt.Println("Закончена обработка файла: " + entry.Name())
-		}()
+		}(file)
 	}
 	wg.Wait()
 
@@ -100,7 +103,16 @@ func parseLogsDir(path string) {
 }
 
 func main() {
-	if len(os.Args) > 1 {
-		parseLogsDir(os.Args[1])
+	if len(os.Args) <= 1 {
+		fmt.Println("Не указаны аргументы командной строки")
+		return
 	}
+
+	conf, err := NewConfig(confFile)
+
+	if err != nil {
+		fmt.Println("Ошибка при чтении конфигурации:", err)
+	}
+
+	parseLogsDir(os.Args[1], conf)
 }
