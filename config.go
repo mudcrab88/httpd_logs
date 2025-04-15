@@ -14,7 +14,7 @@ type Config struct {
 	RegularExpressionTime string `json:"regular_expression_time"`
 }
 
-func NewConfig(fileName string) (*Config, error) {
+func newConfig(fileName string) (*Config, error) {
 	file, err := os.Open(fileName)
 	if err != nil {
 		fmt.Println("Error opening config file:", err)
